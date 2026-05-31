@@ -1,0 +1,32 @@
+[0.013s] Invoking command in '/home/nourz/yaqz_ws/src/build/ros2_yolos_cpp': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PS1=\[\e]0;\u@\h: \w\a\]${debian_chroot:+($debian_chroot)}\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ /usr/bin/cmake /home/nourz/yaqz_ws/src/ros2_yolos_cpp -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/home/nourz/yaqz_ws/src/install/ros2_yolos_cpp
+[0.191s] -- The C compiler identification is GNU 13.3.0
+[0.401s] -- The CXX compiler identification is GNU 13.3.0
+[0.441s] -- Detecting C compiler ABI info
+[0.661s] -- Detecting C compiler ABI info - done
+[0.696s] -- Check for working C compiler: /usr/bin/cc - skipped
+[0.697s] -- Detecting C compile features
+[0.700s] -- Detecting C compile features - done
+[0.729s] -- Detecting CXX compiler ABI info
+[1.035s] -- Detecting CXX compiler ABI info - done
+[1.074s] -- Check for working CXX compiler: /usr/bin/c++ - skipped
+[1.075s] -- Detecting CXX compile features
+[1.076s] -- Detecting CXX compile features - done
+[1.107s] [31mCMake Error at CMakeLists.txt:31 (find_package):
+[1.107s]   By not providing "Findament_cmake.cmake" in CMAKE_MODULE_PATH this project
+[1.107s]   has asked CMake to find a package configuration file provided by
+[1.108s]   "ament_cmake", but CMake did not find one.
+[1.108s] 
+[1.108s]   Could not find a package configuration file provided by "ament_cmake" with
+[1.108s]   any of the following names:
+[1.109s] 
+[1.109s]     ament_cmakeConfig.cmake
+[1.109s]     ament_cmake-config.cmake
+[1.109s] 
+[1.110s]   Add the installation prefix of "ament_cmake" to CMAKE_PREFIX_PATH or set
+[1.110s]   "ament_cmake_DIR" to a directory containing one of the above files.  If
+[1.110s]   "ament_cmake" provides a separate development package or SDK, be sure it
+[1.110s]   has been installed.
+[1.111s] 
+[1.111s] [0m
+[1.111s] -- Configuring incomplete, errors occurred!
+[1.117s] Invoked command in '/home/nourz/yaqz_ws/src/build/ros2_yolos_cpp' returned '1': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PS1=\[\e]0;\u@\h: \w\a\]${debian_chroot:+($debian_chroot)}\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ /usr/bin/cmake /home/nourz/yaqz_ws/src/ros2_yolos_cpp -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/home/nourz/yaqz_ws/src/install/ros2_yolos_cpp
