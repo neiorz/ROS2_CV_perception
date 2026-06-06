@@ -9,16 +9,16 @@ from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 from ultralytics import YOLO
 
-# Inject the ComputerVision_FP path so the node can locate 'pose_analysis.py' autonomously
 sys.path.append(os.path.expanduser('~/yaqz_ws/src/ComputerVision_FP'))
 try:
     from pose_analysis import BehaviorAnalyzer
 except ImportError:
-    # Fallback placeholder if behavior analyzer is missing during pure build tests
     class BehaviorAnalyzer:
-        def get_behavior(self, track_id, kpts, box): return "UNKNOWN", (255, 255, 255)
+        def get_behavior(self, track_id, kpts, box): 
+            return "UNKNOWN", (255, 255, 255)
 
-class YaqzAIPipeline:
+
+class YaqzVisionPipeline:
     def __init__(self):
         """
         Lightweight initialization. Models are NOT loaded here to respect 
@@ -30,9 +30,14 @@ class YaqzAIPipeline:
         self.track_history = {}
 
     def load_resources(self, pose_path, seg_path):
-        """Dynamically allocates heavy AI models into RAM only when triggered."""
+        """Dynamically allocates heavy AI models into RAM and shifts them to GPU."""
         self.pose_model = YOLO(pose_path)
         self.id_seg_model = YOLO(seg_path)
+        
+        # Enforce GPU (CUDA) execution for maximum acceleration
+        self.pose_model.to('cuda')
+        self.id_seg_model.to('cuda')
+        
         self.analyzer = BehaviorAnalyzer()
 
     def unload_resources(self):
@@ -43,19 +48,18 @@ class YaqzAIPipeline:
         self.track_history.clear()
 
     def process_frame(self, frame):
-        """Core AI pipeline execution loop."""
+        """Core AI pipeline execution loop operating entirely on GPU."""
         if self.pose_model is None or self.id_seg_model is None:
             return frame
 
-        # 1. Multi-Person Pose Tracking
+        # Multi-Person Pose Tracking enforced on CUDA
         results = self.pose_model.track(
-            frame, conf=0.5, iou=0.7, device="cpu", imgsz=640,
+            frame, conf=0.5, iou=0.7, device="cuda", imgsz=640,
             tracker="bytetrack.yaml", persist=True, retina_masks=True, augment=False
         )
 
         img_annotated = results[0].plot(boxes=True)
 
-        # 2. Extract bounding boxes and localized tracking analytics
         if results[0].boxes.id is not None:
             boxes = results[0].boxes.xyxy.cpu()
             track_ids = results[0].boxes.id.int().cpu().tolist()
@@ -70,7 +74,8 @@ class YaqzAIPipeline:
                 
                 is_staff = False
                 if chest_roi.size > 0:
-                    id_results = self.id_seg_model(chest_roi, conf=0.5, verbose=False)
+                    # Enforce CUDA evaluation for internal segmentations
+                    id_results = self.id_seg_model(chest_roi, conf=0.5, device="cuda", verbose=False)
                     if id_results[0].masks is not None:
                         is_staff = True
                 
@@ -105,24 +110,22 @@ class YaqzVisionLifecycleNode(LifecycleNode):
     def __init__(self):
         super().__init__('yaqz_vision_node')
         self.publisher_ = None
-        self.timer = None
-        self.cap = None
+        self.subscription_ = None
         self.bridge = CvBridge()
-        self.ai_pipeline = YaqzAIPipeline()  # Instantiated cleanly without loading models yet
+        self.ai_pipeline = YaqzVisionPipeline()
         
-        self.get_logger().info('Yaqz Vision Lifecycle Node instantiated. Status: UNCONFIGURED 💤')
+        self.get_logger().info('Yaqz Vision Lifecycle Node instantiated. Status: UNCONFIGURED')
 
     def on_configure(self, state: LifecycleState) -> TransitionCallbackReturn:
-        """Config State: Triggered manually. Loads weights into RAM."""
+        """Config State: Allocates weights into VRAM and prepares publisher."""
         self.get_logger().info('Configuring Yaqz Vision Node... Initializing AI Pipeline models.')
         
         pose_path = os.path.expanduser('~/yaqz_ws/src/ComputerVision_FP/yolov8n-pose.pt')
         seg_path = os.path.expanduser('~/yaqz_ws/src/ComputerVision_FP/id_seg_model.pt')
         
         try:
-            # Models are ONLY injected into runtime memory during configuration sequence
             self.ai_pipeline.load_resources(pose_path, seg_path)
-            self.get_logger().info('Yaqz AI Pipeline (Pose + Staff Seg + Behavior) loaded successfully! 🧠🚀')
+            self.get_logger().info('Yaqz AI Pipeline successfully mapped onto GPU (CUDA).')
         except Exception as e:
             self.get_logger().error(f'Failed to initialize AI Pipeline: {str(e)}')
             return TransitionCallbackReturn.FAILURE
@@ -131,52 +134,49 @@ class YaqzVisionLifecycleNode(LifecycleNode):
         return TransitionCallbackReturn.SUCCESS
 
     def on_activate(self, state: LifecycleState) -> TransitionCallbackReturn:
-        """Activation State: Connects to hardware streaming devices and triggers callback timers."""
-        self.get_logger().info('Activating Yaqz Vision Node... Spinning up hardware webcam channel. 🎥')
+        """Activation State: Subscribes to the distributed external camera sensor topic."""
+        self.get_logger().info('Activating Yaqz Vision Node... Connecting to distributed image stream.')
         
-        self.cap = cv2.VideoCapture(0)
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+        self.subscription_ = self.create_subscription(
+            Image,
+            '/image_raw',
+            self.image_callback,
+            10
+        )
         
-        if not self.cap.isOpened():
-            self.get_logger().error('CRITICAL: Webcam stream could not be established!')
-            return TransitionCallbackReturn.FAILURE
-            
-        self.get_logger().info('Webcam stream securely opened! 🎉')
-        self.timer = self.create_timer(0.05, self.process_frame)
-        
-        self.get_logger().info('Yaqz Vision Node transition verified. Status: ACTIVE 🔥')
+        self.get_logger().info('Yaqz Vision Node transition verified. Status: ACTIVE')
         return TransitionCallbackReturn.SUCCESS
 
     def on_deactivate(self, state: LifecycleState) -> TransitionCallbackReturn:
-        """Deactivation State: Safely disarms timers and cameras to preserve battery energy."""
-        self.get_logger().info('Deactivating Yaqz Vision Node... Freezing hardware loops.')
-        if self.timer:
-            self.destroy_timer(self.timer)
-            self.timer = None
-        if self.cap:
-            self.cap.release()
-            self.cap = None
+        """Deactivation State: Safely disarms incoming data subscription flows."""
+        self.get_logger().info('Deactivating Yaqz Vision Node... Freezing subscription hooks.')
+        if self.subscription_:
+            self.destroy_subscription(self.subscription_)
+            self.subscription_ = None
         return TransitionCallbackReturn.SUCCESS
 
     def on_cleanup(self, state: LifecycleState) -> TransitionCallbackReturn:
-        """Cleanup State: Completely drops models from memory block."""
-        self.get_logger().info('Cleaning up resources... Freeing AI Pipeline memory allocations.')
+        """Cleanup State: Releases deep learning weights blocks from memory allocations."""
+        self.get_logger().info('Cleaning up resources... Freeing AI Pipeline GPU/RAM configurations.')
         self.ai_pipeline.unload_resources()
         return TransitionCallbackReturn.SUCCESS
 
-    def process_frame(self):
-        if self.cap is None or not self.cap.isOpened():
-            return
-
-        ret, frame = self.cap.read()
-        if not ret:
-            return
-
+    def image_callback(self, msg: Image):
+        """Pipeline callback synchronized with external camera frames stream."""
         try:
-            annotated_frame = self.ai_pipeline.process_frame(frame)
+            # Step 1: Decode ROS Image message back into OpenCV Matrix
+            cv_frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
+            
+            # Step 2: Feed frame to the GPU-accelerated execution loop
+            annotated_frame = self.ai_pipeline.process_frame(cv_frame)
+            
+            # Step 3: Serialize Matrix array back into standard ROS Image message
             ros_image = self.bridge.cv2_to_imgmsg(annotated_frame, encoding="bgr8")
-            self.publisher_.publish(ros_image)
+            ros_image.header = msg.header
+            
+            # Step 4: Publish inference metrics out to the ecosystem network
+            if self.publisher_ is not None:
+                self.publisher_.publish(ros_image)
             
             cv2.imshow("Yaqz Security Robot - AI Full Analysis", annotated_frame)
             cv2.waitKey(1)
@@ -202,6 +202,7 @@ def main(args=None):
             rclpy.shutdown()
         except Exception:
             pass
+
 
 if __name__ == '__main__':
     main()
