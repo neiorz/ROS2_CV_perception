@@ -38,6 +38,7 @@ colcon build --packages-select yaqz_vision_integration
 
 Always source the workspace environment before running the node:
 Bash
+
 1.**Start the cam:**
 
 ```bash
@@ -45,7 +46,7 @@ ros2 run v4l2_camera v4l2_camera_node
 
 ```
 
-2. Run the Vision Lifecycle Node
+2. **Run the Vision Lifecycle Node:**
 Bash
 ```bash
 # Source the setup file
@@ -55,7 +56,7 @@ source install/setup.bash
 python3 src/yaqz_vision_integration/yaqz_vision_integration/vision_node.py
 
 ```
-3. Manage Node Lifecycle States
+3. **Manage Node Lifecycle States:**
 
 Since this is a managed (Lifecycle) node, you need to transition its state from a new terminal (don't forget to source in the new terminal too):
 
