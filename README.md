@@ -4,7 +4,7 @@ This repository contains the core **ROS 2 Package** responsible for integrating 
 
 ---
 
-## 🧠 AI Module Integration
+## AI Module Integration
 The deep learning models, YOLOv8 training pipelines, and core computer vision scripts used by this node are maintained in a dedicated repository:
 👉 **[Yaqz AI Module (ComputerVision_FP)](https://github.com/neiorz/ComputerVision_FP)**
 
