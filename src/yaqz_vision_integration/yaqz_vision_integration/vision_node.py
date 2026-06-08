@@ -8,6 +8,7 @@ from rclpy.lifecycle import LifecycleNode, LifecycleState, TransitionCallbackRet
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 from ultralytics import YOLO
+from rclpy.qos import qos_profile_sensor_data
 
 sys.path.append(os.path.expanduser('~/yaqz_ws/src/ComputerVision_FP'))
 try:
@@ -109,15 +110,17 @@ class YaqzVisionPipeline:
 class YaqzVisionLifecycleNode(LifecycleNode):
     def __init__(self):
         super().__init__('yaqz_vision_node')
-        self.publisher_ = None
         self.subscription_ = None
         self.bridge = CvBridge()
         self.ai_pipeline = YaqzVisionPipeline()
         
+        # Switch to a regular publisher — no lifecycle gating needed for the output channel
+        self.publisher_ = self.create_publisher(Image, '/yaqz/processed_image', 10)
+        
         self.get_logger().info('Yaqz Vision Lifecycle Node instantiated. Status: UNCONFIGURED')
 
     def on_configure(self, state: LifecycleState) -> TransitionCallbackReturn:
-        """Config State: Allocates weights into VRAM and prepares publisher."""
+        """Config State: Allocates weights into VRAM."""
         self.get_logger().info('Configuring Yaqz Vision Node... Initializing AI Pipeline models.')
         
         pose_path = os.path.expanduser('~/yaqz_ws/src/ComputerVision_FP/yolov8n-pose.pt')
@@ -130,18 +133,18 @@ class YaqzVisionLifecycleNode(LifecycleNode):
             self.get_logger().error(f'Failed to initialize AI Pipeline: {str(e)}')
             return TransitionCallbackReturn.FAILURE
 
-        self.publisher_ = self.create_lifecycle_publisher(Image, '/yaqz/processed_image', 10)
         return TransitionCallbackReturn.SUCCESS
 
     def on_activate(self, state: LifecycleState) -> TransitionCallbackReturn:
-        """Activation State: Subscribes to the distributed external camera sensor topic."""
+        """Activation State: Subscribes to the external camera sensor using sensor QoS."""
         self.get_logger().info('Activating Yaqz Vision Node... Connecting to distributed image stream.')
         
+        # Enforce Best-Effort Sensor Data QoS profile to match v4l2_camera constraint perfectly
         self.subscription_ = self.create_subscription(
             Image,
             '/image_raw',
             self.image_callback,
-            10
+            qos_profile=qos_profile_sensor_data
         )
         
         self.get_logger().info('Yaqz Vision Node transition verified. Status: ACTIVE')
@@ -175,8 +178,7 @@ class YaqzVisionLifecycleNode(LifecycleNode):
             ros_image.header = msg.header
             
             # Step 4: Publish inference metrics out to the ecosystem network
-            if self.publisher_ is not None:
-                self.publisher_.publish(ros_image)
+            self.publisher_.publish(ros_image)
             
             cv2.imshow("Yaqz Security Robot - AI Full Analysis", annotated_frame)
             cv2.waitKey(1)
